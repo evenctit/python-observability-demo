@@ -4,12 +4,15 @@
 - 提供 RESTful API (/api/process)，该方法内部调用两个 Python 方法 method_a 和 method_b
 - 使用 OpenTelemetry 进行链路追踪，通过 OTLP/HTTP 上报到 Tempo
 - 输出 JSON 结构化日志到 stdout，由 OpenTelemetry Collector (filelog) 采集并发送到 Loki
+- 使用 Pyroscope SDK 持续上报 CPU profile，在 Grafana 中以 FlameGraph 展示
 """
 import os
 import time
 import json
 import logging
 import random
+
+import pyroscope
 
 from flask import Flask, jsonify, request
 from opentelemetry import trace
@@ -18,6 +21,17 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
+
+# ---------- Pyroscope 持续 profiling 配置 ----------
+# SDK 启动后台采样线程, 周期性采集 CPU profile 并上报到 Pyroscope server
+pyroscope.configure(
+    application_name=os.environ.get("PYROSCOPE_APPLICATION_NAME", "demo-api"),
+    server_address=os.environ.get(
+        "PYROSCOPE_SERVER_ADDRESS",
+        "http://pyroscope.monitoring.svc.cluster.local:4040",
+    ),
+    tags={"service": "demo-api"},
+)
 
 
 # ---------- 日志配置：单行 JSON 输出到 stdout ----------
